@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🇯🇵 日本旅遊記帳 v2</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#222;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif}
+header{background:#202124;color:white;padding:18px 16px;position:sticky;top:0;z-index:10}header h1{margin:0;font-size:22px}header small{opacity:.75}
+main{max-width:1000px;margin:auto;padding:14px}.card{background:#fff;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px #0001}
+h2{font-size:17px;margin:0 0 12px}.grid{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:600px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:900px){.grid{grid-template-columns:repeat(4,1fr)}}\n.grid>div{min-width:0}input,select,button{min-width:0}label{font-size:12px;color:#666;display:block;margin-bottom:5px}
+input,select,button{width:100%;font:inherit;padding:10px;border:1px solid #ddd;border-radius:10px;background:#fff}button{background:#222;color:#fff;border:0;font-weight:600;cursor:pointer}
+.secondary{background:#eee;color:#222}.danger{background:#d9534f}.actions{display:flex;gap:8px;margin-top:10px}.actions>*{flex:1}
+.summary{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}@media(min-width:700px){.summary{grid-template-columns:repeat(4,1fr)}}
+.metric{background:#f7f7f7;padding:12px;border-radius:12px}.metric b{display:block;font-size:19px;margin-top:5px}.note{font-size:12px;color:#777;margin-top:8px}
+.tablewrap{overflow:auto}table{width:100%;min-width:850px;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:13px}th{color:#666}.pill{font-size:11px;background:#eee;padding:3px 7px;border-radius:999px}
+.bar{height:9px;background:#eee;border-radius:99px;overflow:hidden;margin-top:7px}.bar i{display:block;height:100%;background:#555}
+.budgetrow{margin:10px 0}.budgettop{display:flex;justify-content:space-between;font-size:13px}.small{font-size:11px;color:#777}
+.tabs{display:flex;gap:6px;margin-bottom:12px}.tabs button{background:#eee;color:#222}.tabs button.active{background:#222;color:#fff}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header><h1>🇯🇵 日本旅遊記帳 v2</h1><small>離線使用・自動儲存・預算・統計・分帳・Excel 匯出</small></header>
+<main>
+
+<section class="card">
+<h2>➕ 新增支出</h2>
+<div class="grid">
+<div><label>日期</label><input id="date" type="date"></div>
+<div><label>品項</label><input id="item" placeholder="例如：高山巴士"></div>
+<div><label>類別</label><input id="category" type="text" placeholder="例如：餐飲、交通、購物"></div>
+<div><label>金額</label><input id="amount" type="number" min="0" step="0.01"></div>
+<div><label>幣別</label><select id="currency"><option>JPY</option><option>TWD</option><option>USD</option><option>EUR</option></select></div>
+<div><label>匯率（1 外幣 = NT$）</label><input id="rate" type="number" min="0" step="0.000001"></div>
+<div><label>付款者</label><input id="payer" type="text" value="我" placeholder="例如：我、王小姐"></div>
+<div><label>分帳方式</label><select id="split"><option>共同</option><option>我個人</option><option>旅伴個人</option></select></div>
+</div>
+<div id="converted" class="note">台幣金額：NT$0</div>
+<div class="actions"><button id="save">新增支出</button><button class="secondary" id="clear">清除</button></div><div class="note">手機版會自動改為單欄排列，避免日期、品項等輸入框互相擠壓。</div>
+</section>
+
+<section class="card">
+<h2>📊 旅程摘要</h2>
+<div class="summary">
+<div class="metric">總支出<b id="total">NT$0</b></div>
+<div class="metric">我支付<b id="mine">NT$0</b></div>
+<div class="metric">旅伴支付<b id="partner">NT$0</b></div>
+<div class="metric">目前應補<b id="settleAmount">NT$0</b></div>
+</div>
+<div id="settle" class="note"></div>
+</section>
+
+<section class="card">
+<h2>🎯 預算</h2>
+<div class="grid">
+<div><label>旅程總預算（NT$）</label><input id="budget" type="number" min="0" placeholder="260000"></div>
+</div>
+<div id="budgetInfo" class="note"></div>
+<div id="budgetBars"></div>
+</section>
+
+<section class="card">
+<h2>📈 統計</h2>
+<div class="tabs"><button class="active" data-tab="cat">類別</button><button data-tab="day">每日</button><button data-tab="payer">付款者</button></div>
+<div id="stats"></div>
+</section>
+
+<section class="card">
+<h2>📋 支出明細</h2>
+<div class="grid">
+<div><label>日期</label><input id="filterDate" type="date"></div>
+<div><label>類別</label><select id="filterCategory"><option value="">全部</option></select></div>
+<div><label>付款者</label><select id="filterPayer"><option value="">全部</option><option>我</option><option>旅伴</option></select></div>
+<div><label>搜尋品項</label><input id="filterText" placeholder="例如：拉麵"></div>
+</div>
+<div class="actions">
+<button id="export">匯出 Excel</button><button class="secondary" id="backup">備份 JSON</button><button class="secondary" id="restoreBtn">還原 JSON</button>
+<input id="restore" type="file" accept=".json" style="display:none">
+</div>
+<div id="backupTime" class="note"></div>
+<div class="tablewrap" style="margin-top:12px"><table><thead><tr><th>日期</th><th>品項</th><th>類別</th><th>原幣</th><th>匯率</th><th>台幣</th><th>付款者</th><th>分帳</th><th></th></tr></thead><tbody id="tbody"></tbody></table></div>
+</section>
+
+<section class="card">
+<h2>⚙️ 資料管理</h2>
+<div class="actions"><button class="secondary" id="clearAll">清空全部記帳</button></div>
+<div class="note">資料只儲存在目前瀏覽器裝置。建議旅途中每天備份一次 JSON；備份檔可跨手機／電腦還原。</div>
+</section>
+</main>
+
+<script>
+const cats=["機票","住宿","交通","餐飲","咖啡／飲料","購物","門票／景點","行李／寄物","網路／SIM","手續費","伴手禮","其他"];
+const rates={JPY:.21,TWD:1,USD:31.5,EUR:36.5};
+let data=JSON.parse(localStorage.getItem("jp_expenses_v2")||"[]");
+let budget=Number(localStorage.getItem("jp_budget_v2")||0);
+const $=id=>document.getElementById(id), fmt=n=>Math.round(n).toLocaleString("zh-TW");
+
+$("date").value=new Date().toISOString().slice(0,10);$("rate").value=rates.JPY;$("budget").value=budget||"";
+$("currency").onchange=()=>{$("rate").value=rates[$("currency").value]||1;calc()};
+["amount","rate"].forEach(x=>$(x).oninput=calc);
+$("budget").oninput=()=>{budget=Number($("budget").value)||0;localStorage.setItem("jp_budget_v2",budget);renderAll()};
+["filterDate","filterCategory","filterPayer","filterText"].forEach(x=>$(x).oninput=renderTable);
+document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-tab]").forEach(x=>x.classList.remove("active"));b.classList.add("active");renderStats(b.dataset.tab)});
+function calc(){let a=+$("amount").value||0,r=+$("rate").value||0;$("converted").textContent="台幣金額：NT$"+fmt(a*r)}
+function persist(){localStorage.setItem("jp_expenses_v2",JSON.stringify(data))}
+function save(){
+ let a=+$("amount").value||0,r=+$("rate").value||0;
+ if(!$("date").value||!$("item").value.trim()||a<=0||r<=0){alert("請完整填寫日期、品項、金額與匯率");return}
+ let category=$("category").value.trim()||"其他";
+  data.push({id:Date.now(),date:$("date").value,item:$("item").value.trim(),category,amount:a,currency:$("currency").value,rate:r,twd:a*r,payer:($("payer").value.trim()||"我"),split:$("split").value});
+ persist();$("item").value="";$("amount").value="";calc();renderAll()
+}
+function filtered(){
+ let fd=$("filterDate").value,fc=$("filterCategory").value.trim().toLowerCase(),fp=$("filterPayer").value.trim().toLowerCase(),ft=$("filterText").value.toLowerCase();
+ return data.filter(x=>(!fd||x.date===fd)&&(!fc||String(x.category||"").toLowerCase().includes(fc))&&(!fp||String(x.payer||"").toLowerCase().includes(fp))&&(!ft||x.item.toLowerCase().includes(ft))).sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id)
+}
+function renderTable(){
+ let rows=filtered();
+ $("tbody").innerHTML=rows.map(x=>`<tr><td>${x.date}</td><td>${esc(x.item)}</td><td><span class="pill">${esc(x.category)}</span></td><td>${fmt(x.amount)} ${x.currency}</td><td>${x.rate}</td><td>NT$${fmt(x.twd)}</td><td>${x.payer}</td><td>${x.split}</td><td><button class="danger" style="width:auto;padding:6px 8px" onclick="del(${x.id})">刪除</button></td></tr>`).join("")||`<tr><td colspan="9" class="small">尚無符合條件的紀錄</td></tr>`
+}
+function renderSummary(){
+ let total=data.reduce((s,x)=>s+x.twd,0),mine=data.filter(x=>x.payer==="我").reduce((s,x)=>s+x.twd,0),partner=data.filter(x=>x.payer==="旅伴").reduce((s,x)=>s+x.twd,0);
+ $("total").textContent="NT$"+fmt(total);$("mine").textContent="NT$"+fmt(mine);$("partner").textContent="NT$"+fmt(partner);
+ let common=data.filter(x=>x.split==="共同").reduce((s,x)=>s+x.twd,0), mePersonal=data.filter(x=>x.split==="我個人").reduce((s,x)=>s+x.twd,0), paPersonal=data.filter(x=>x.split==="旅伴個人").reduce((s,x)=>s+x.twd,0);
+ let meShould=common/2+mePersonal, paShould=common/2+paPersonal, diff=mine-meShould;
+ if(diff>0){$("settleAmount").textContent="NT$"+fmt(diff);$("settle").textContent=`旅伴應付我 NT$${fmt(diff)}。`;}
+ else if(diff<0){$("settleAmount").textContent="NT$"+fmt(-diff);$("settle").textContent=`我應付旅伴 NT$${fmt(-diff)}。`;}
+ else{$("settleAmount").textContent="NT$0";$("settle").textContent="目前分帳已平衡。"}
+ if(budget>0){let pct=total/budget*100,remain=budget-total;$("budgetInfo").textContent=`已使用 ${pct.toFixed(1)}%｜剩餘 NT$${fmt(Math.max(remain,0))}${remain<0?"（已超支）":""}`}
+ else $("budgetInfo").textContent="尚未設定總預算。"
+}
+function renderBudget(){
+ let total=data.reduce((s,x)=>s+x.twd,0);
+ $("budgetBars").innerHTML=cats.map(c=>{let v=data.filter(x=>x.category===c).reduce((s,x)=>s+x.twd,0);if(!v)return "";let pct=total?v/total*100:0;return `<div class="budgetrow"><div class="budgettop"><span>${c}</span><span>NT$${fmt(v)} (${pct.toFixed(1)}%)</span></div><div class="bar"><i style="width:${Math.min(pct,100)}%"></i></div></div>`}).join("")||`<div class="small">有支出後會顯示類別占比。</div>`
+}
+function renderStats(type){
+ let m={};
+ if(type==="cat") data.forEach(x=>m[x.category]=(m[x.category]||0)+x.twd);
+ if(type==="payer") data.forEach(x=>m[x.payer]=(m[x.payer]||0)+x.twd);
+ if(type==="day") data.forEach(x=>m[x.date]=(m[x.date]||0)+x.twd);
+ let entries=Object.entries(m).sort((a,b)=>b[1]-a[1]);
+ $("stats").innerHTML=entries.length?`<div class="tablewrap"><table style="min-width:400px"><thead><tr><th>${type==="cat"?"類別":type==="payer"?"付款者":"日期"}</th><th>金額</th><th>占比</th></tr></thead><tbody>${entries.map(([k,v])=>`<tr><td>${esc(k)}</td><td>NT$${fmt(v)}</td><td>${(v/data.reduce((s,x)=>s+x.twd,0)*100).toFixed(1)}%</td></tr>`).join("")}</tbody></table></div>`:"<div class='small'>尚無資料</div>"
+}
+function renderAll(){renderTable();renderSummary();renderBudget();renderStats(document.querySelector("[data-tab].active")?.dataset.tab||"cat")}
+function del(id){if(confirm("確定刪除這筆支出？")){data=data.filter(x=>x.id!==id);persist();renderAll()}}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+$("save").onclick=save;$("clear").onclick=()=>{$("item").value="";$("category").value="";$("amount").value="";$("payer").value="我";calc()};
+$("backup").onclick=()=>{let stamp=new Date().toISOString();localStorage.setItem("jp_last_backup_v2",stamp);$("backupTime").textContent="最後備份："+new Date(stamp).toLocaleString();let blob=new Blob([JSON.stringify({version:2,exportedAt:stamp,budget,data},null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="日本旅遊記帳_v2_備份.json";a.click()};
+$("restoreBtn").onclick=()=>$("restore").click();
+$("restore").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let o=JSON.parse(r.result);data=Array.isArray(o)?o:(o.data||[]);budget=Number(o.budget||0);localStorage.setItem("jp_budget_v2",budget);$("budget").value=budget||"";persist();renderAll();alert("資料已還原")}catch{alert("備份檔格式不正確")}};r.readAsText(f)};
+$("clearAll").onclick=()=>{if(confirm("確定要清空全部記帳？此操作無法復原，請先備份。")){data=[];persist();renderAll()}};
+$("export").onclick=()=>{
+ let total=data.reduce((s,x)=>s+x.twd,0),mine=data.filter(x=>x.payer==="我").reduce((s,x)=>s+x.twd,0),partner=data.filter(x=>x.payer==="旅伴").reduce((s,x)=>s+x.twd,0);
+ let common=data.filter(x=>x.split==="共同").reduce((s,x)=>s+x.twd,0),mePersonal=data.filter(x=>x.split==="我個人").reduce((s,x)=>s+x.twd,0),paPersonal=data.filter(x=>x.split==="旅伴個人").reduce((s,x)=>s+x.twd,0),diff=mine-(common/2+mePersonal);
+ const detail=[["日期","品項","類別","原幣金額","幣別","匯率","台幣金額","付款者","分帳方式"],...data.map(x=>[x.date,x.item,x.category,x.amount,x.currency,x.rate,x.twd,x.payer,x.split])];
+ const cat=[["類別","台幣金額","占總支出"],...cats.map(c=>{let v=data.filter(x=>x.category===c).reduce((s,x)=>s+x.twd,0);return[c,v,total?(v/total):0]}).filter(x=>x[1]>0)];
+ const day=[["日期","台幣金額"],...Object.entries(data.reduce((m,x)=>(m[x.date]=(m[x.date]||0)+x.twd,m),{})).sort()];
+ const settle=[["項目","金額"],["總支出",total],[p1+"實際支付",mine],[p2+"實際支付",partner],["共同支出",common],["我個人",mePersonal],["旅伴個人",paPersonal],["應結算差額",Math.abs(diff)],["結算結果",diff>0?"旅伴 → 我":diff<0?"我 → 旅伴":"已平衡"]];
+ const sheet=(name,rows)=>`<table><tr><th colspan="${Math.max(...rows.map(r=>r.length))}">${name}</th></tr>`+rows.map(r=>"<tr>"+r.map(v=>`<td>${esc(v)}</td>`).join("")+"</tr>").join("")+"</table>`;
+ let html="<html><head><meta charset='UTF-8'><style>table{border-collapse:collapse;margin:15px}td,th{border:1px solid #ccc;padding:6px}th{background:#eee}</style></head><body>"+sheet("支出明細",detail)+sheet("類別統計",cat)+sheet("每日統計",day)+sheet("分帳",settle)+"</body></html>";
+ let blob=new Blob([html],{type:"application/vnd.ms-excel"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="日本旅遊記帳_v2.xls";a.click();
+};
+let last=localStorage.getItem("jp_last_backup_v2");if(last)$("backupTime").textContent="最後備份："+new Date(last).toLocaleString();
+renderAll();calc();
+</script>
+</body></html>
