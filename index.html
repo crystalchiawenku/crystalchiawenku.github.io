@@ -121,13 +121,29 @@ function renderTable(){
  $("tbody").innerHTML=rows.map(x=>`<tr><td>${x.date}</td><td>${esc(x.item)}</td><td><span class="pill">${esc(x.category)}</span></td><td>${fmt(x.amount)} ${x.currency}</td><td>${x.rate}</td><td>NT$${fmt(x.twd)}</td><td>${x.payer}</td><td>${x.split}</td><td><button class="danger" style="width:auto;padding:6px 8px" onclick="del(${x.id})">刪除</button></td></tr>`).join("")||`<tr><td colspan="9" class="small">尚無符合條件的紀錄</td></tr>`
 }
 function renderSummary(){
- let total=data.reduce((s,x)=>s+x.twd,0),mine=data.filter(x=>x.payer==="我").reduce((s,x)=>s+x.twd,0),partner=data.filter(x=>x.payer==="旅伴").reduce((s,x)=>s+x.twd,0);
- $("total").textContent="NT$"+fmt(total);$("mine").textContent="NT$"+fmt(mine);$("partner").textContent="NT$"+fmt(partner);
- let common=data.filter(x=>x.split==="共同").reduce((s,x)=>s+x.twd,0), mePersonal=data.filter(x=>x.split==="我個人").reduce((s,x)=>s+x.twd,0), paPersonal=data.filter(x=>x.split==="旅伴個人").reduce((s,x)=>s+x.twd,0);
- let meShould=common/2+mePersonal, paShould=common/2+paPersonal, diff=mine-meShould;
- if(diff>0){$("settleAmount").textContent="NT$"+fmt(diff);$("settle").textContent=`旅伴應付我 NT$${fmt(diff)}。`;}
- else if(diff<0){$("settleAmount").textContent="NT$"+fmt(-diff);$("settle").textContent=`我應付旅伴 NT$${fmt(-diff)}。`;}
- else{$("settleAmount").textContent="NT$0";$("settle").textContent="目前分帳已平衡。"}
+ let total=data.reduce((s,x)=>s+x.twd,0);
+ let payers=[...new Set(data.map(x=>String(x.payer||"").trim()).filter(Boolean))];
+ let p1=payers[0]||"我",p2=payers[1]||"旅伴";
+ let mine=data.filter(x=>x.payer===p1).reduce((s,x)=>s+x.twd,0);
+ let partner=data.filter(x=>x.payer===p2).reduce((s,x)=>s+x.twd,0);
+ $("total").textContent="NT$"+fmt(total);
+ $("mine").textContent="NT$"+fmt(mine);
+ $("partner").textContent="NT$"+fmt(partner);
+ $("mine").previousElementSibling.textContent=p1+"支付";
+ $("partner").previousElementSibling.textContent=(payers[1]||"第二位付款者")+"支付";
+ let common=data.filter(x=>x.split==="共同").reduce((s,x)=>s+x.twd,0);
+ let mePersonal=data.filter(x=>x.split==="我個人").reduce((s,x)=>s+x.twd,0);
+ let paPersonal=data.filter(x=>x.split==="旅伴個人").reduce((s,x)=>s+x.twd,0);
+ if(payers.length===2){
+   let meShould=common/2+mePersonal;
+   let diff=mine-meShould;
+   if(diff>0){$("settleAmount").textContent="NT$"+fmt(diff);$("settle").textContent=`${p2} 應付 ${p1} NT$${fmt(diff)}。`;}
+   else if(diff<0){$("settleAmount").textContent="NT$"+fmt(-diff);$("settle").textContent=`${p1} 應付 ${p2} NT$${fmt(-diff)}。`;}
+   else{$("settleAmount").textContent="NT$0";$("settle").textContent="目前分帳已平衡。"}
+ }else{
+   $("settleAmount").textContent="—";
+   $("settle").textContent=payers.length===1?"目前只有 1 位付款者，暫不計算共同分帳。":"尚無付款資料。";
+ }
  if(budget>0){let pct=total/budget*100,remain=budget-total;$("budgetInfo").textContent=`已使用 ${pct.toFixed(1)}%｜剩餘 NT$${fmt(Math.max(remain,0))}${remain<0?"（已超支）":""}`}
  else $("budgetInfo").textContent="尚未設定總預算。"
 }
@@ -152,13 +168,16 @@ $("restoreBtn").onclick=()=>$("restore").click();
 $("restore").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let o=JSON.parse(r.result);data=Array.isArray(o)?o:(o.data||[]);budget=Number(o.budget||0);localStorage.setItem("jp_budget_v2",budget);$("budget").value=budget||"";persist();renderAll();alert("資料已還原")}catch{alert("備份檔格式不正確")}};r.readAsText(f)};
 $("clearAll").onclick=()=>{if(confirm("確定要清空全部記帳？此操作無法復原，請先備份。")){data=[];persist();renderAll()}};
 $("export").onclick=()=>{
- let total=data.reduce((s,x)=>s+x.twd,0),mine=data.filter(x=>x.payer==="我").reduce((s,x)=>s+x.twd,0),partner=data.filter(x=>x.payer==="旅伴").reduce((s,x)=>s+x.twd,0);
- let common=data.filter(x=>x.split==="共同").reduce((s,x)=>s+x.twd,0),mePersonal=data.filter(x=>x.split==="我個人").reduce((s,x)=>s+x.twd,0),paPersonal=data.filter(x=>x.split==="旅伴個人").reduce((s,x)=>s+x.twd,0),diff=mine-(common/2+mePersonal);
+ let total=data.reduce((s,x)=>s+x.twd,0);
+ let payers=[...new Set(data.map(x=>String(x.payer||"").trim()).filter(Boolean))];
+ let p1=payers[0]||"我",p2=payers[1]||"旅伴";
+ let mine=data.filter(x=>x.payer===p1).reduce((s,x)=>s+x.twd,0),partner=data.filter(x=>x.payer===p2).reduce((s,x)=>s+x.twd,0);
+ let common=data.filter(x=>x.split==="共同").reduce((s,x)=>s+x.twd,0),mePersonal=data.filter(x=>x.split==="我個人").reduce((s,x)=>s+x.twd,0),paPersonal=data.filter(x=>x.split==="旅伴個人").reduce((s,x)=>s+x.twd,0),diff=payers.length===2?mine-(common/2+mePersonal):0;
  const detail=[["日期","品項","類別","原幣金額","幣別","匯率","台幣金額","付款者","分帳方式"],...data.map(x=>[x.date,x.item,x.category,x.amount,x.currency,x.rate,x.twd,x.payer,x.split])];
  const cat=[["類別","台幣金額","占總支出"],...cats.map(c=>{let v=data.filter(x=>x.category===c).reduce((s,x)=>s+x.twd,0);return[c,v,total?(v/total):0]}).filter(x=>x[1]>0)];
  const day=[["日期","台幣金額"],...Object.entries(data.reduce((m,x)=>(m[x.date]=(m[x.date]||0)+x.twd,m),{})).sort()];
- const settle=[["項目","金額"],["總支出",total],[p1+"實際支付",mine],[p2+"實際支付",partner],["共同支出",common],["我個人",mePersonal],["旅伴個人",paPersonal],["應結算差額",Math.abs(diff)],["結算結果",diff>0?"旅伴 → 我":diff<0?"我 → 旅伴":"已平衡"]];
- const sheet=(name,rows)=>`<table><tr><th colspan="${Math.max(...rows.map(r=>r.length))}">${name}</th></tr>`+rows.map(r=>"<tr>"+r.map(v=>`<td>${esc(v)}</td>`).join("")+"</tr>").join("")+"</table>`;
+ const settle=[["項目","金額"],["總支出",total],[p1+"實際支付",mine],[p2+"實際支付",partner],["共同支出",common],["我個人",mePersonal],["旅伴個人",paPersonal],["應結算差額",Math.abs(diff)],["結算結果",diff>0?p2+" → "+p1:diff<0?p1+" → "+p2:"已平衡"]];
+ const sheet=(name,rows)=>`<table><tr><th colspan="${Math.max(...rows.map(r=>r.length))}">${name}</th></tr>`+rows.map(r=>"<tr>"+r.map(v=>`<td>${esc(v)}</td>`).join("")+"</tr>").join("")+"</table>";
  let html="<html><head><meta charset='UTF-8'><style>table{border-collapse:collapse;margin:15px}td,th{border:1px solid #ccc;padding:6px}th{background:#eee}</style></head><body>"+sheet("支出明細",detail)+sheet("類別統計",cat)+sheet("每日統計",day)+sheet("分帳",settle)+"</body></html>";
  let blob=new Blob([html],{type:"application/vnd.ms-excel"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="日本旅遊記帳_v2.xls";a.click();
 };
