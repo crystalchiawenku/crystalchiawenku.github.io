@@ -30,10 +30,10 @@ input,select,button{width:100%;font:inherit;padding:10px;border:1px solid #ddd;b
 <div class="grid">
 <div><label>日期</label><input id="date" type="date"></div>
 <div><label>品項</label><input id="item" placeholder="例如：高山巴士"></div>
-<div><label>類別</label><input id="category" type="text" placeholder="例如：餐飲、交通、購物"></div>
+<div><label>類別</label><select id="category"><option value="餐飲">餐飲</option><option value="門票">門票</option><option value="伴手禮">伴手禮</option><option value="交通">交通</option><option value="其他">其他</option></select><input id="categoryOther" type="text" placeholder="請輸入其他類別" style="display:none;margin-top:6px"></div>
 <div><label>金額</label><input id="amount" type="number" min="0" step="0.01"></div>
 <div><label>幣別</label><select id="currency"><option>JPY</option><option>TWD</option><option>USD</option><option>EUR</option></select></div>
-<div><label>匯率（1 外幣 = NT$）</label><input id="rate" type="number" min="0" step="0.000001"></div>
+<div><label>匯率（1 外幣 = NT$）</label><input id="rate" type="number" min="0" step="0.000001"><button type="button" class="secondary" id="fetchRate" style="margin-top:6px">↻ 取得最新匯率</button><div id="rateStatus" class="note"></div></div>
 <div><label>付款者</label><input id="payer" type="text" value="我" placeholder="例如：我、王小姐"></div>
 <div><label>分帳方式</label><select id="split"><option>共同</option><option>我個人</option><option>旅伴個人</option></select></div>
 </div>
@@ -91,14 +91,48 @@ input,select,button{width:100%;font:inherit;padding:10px;border:1px solid #ddd;b
 </main>
 
 <script>
-const cats=["機票","住宿","交通","餐飲","咖啡／飲料","購物","門票／景點","行李／寄物","網路／SIM","手續費","伴手禮","其他"];
-const rates={JPY:.21,TWD:1,USD:31.5,EUR:36.5};
+const cats=["餐飲","門票","伴手禮","交通","其他"];
+const fallbackRates={JPY:.21,TWD:1,USD:31.5,EUR:36.5};
 let data=JSON.parse(localStorage.getItem("jp_expenses_v2")||"[]");
 let budget=Number(localStorage.getItem("jp_budget_v2")||0);
 const $=id=>document.getElementById(id), fmt=n=>Math.round(n).toLocaleString("zh-TW");
 
-$("date").value=new Date().toISOString().slice(0,10);$("rate").value=rates.JPY;$("budget").value=budget||"";
-$("currency").onchange=()=>{$("rate").value=rates[$("currency").value]||1;calc()};
+$("date").value=new Date().toISOString().slice(0,10);$("rate").value=fallbackRates.JPY;$("budget").value=budget||"";
+function syncOtherCategory(){
+  const isOther=$("category").value==="其他";
+  $("categoryOther").style.display=isOther?"block":"none";
+  if(!isOther) $("categoryOther").value="";
+}
+$("category").onchange=syncOtherCategory;
+syncOtherCategory();
+$("currency").onchange=()=>{setRateFallback();calc();fetchRate()};
+function setRateFallback(){
+  const c=$("currency").value;
+  $("rate").value=fallbackRates[c]||1;
+  $("rateStatus").textContent="預設匯率，可按「取得最新匯率」更新。";
+}
+async function fetchRate(){
+  const currency=$("currency").value;
+  if(currency==="TWD"){$("rate").value=1;$("rateStatus").textContent="TWD 不需換算。";calc();return;}
+  $("rateStatus").textContent="正在取得最新匯率…";
+  try{
+    const res=await fetch("https://open.er-api.com/v6/latest/TWD",{cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const obj=await res.json();
+    const perTwd=obj.rates&&obj.rates[currency];
+    if(!perTwd) throw new Error("找不到幣別");
+    const rate=1/perTwd;
+    $("rate").value=Number(rate.toFixed(6));
+    const updated=obj.time_last_update_utc?new Date(obj.time_last_update_utc).toLocaleString("zh-TW"):"";
+    $("rateStatus").textContent="已更新："+updated+"（市場中間價參考，實際刷卡／換匯可能不同）";
+    calc();
+  }catch(e){
+    $("rateStatus").textContent="目前無法取得網路匯率，已保留預設匯率；也可手動輸入。";
+    calc();
+  }
+}
+$("fetchRate").onclick=fetchRate;
+fetchRate();
 ["amount","rate"].forEach(x=>$(x).oninput=calc);
 $("budget").oninput=()=>{budget=Number($("budget").value)||0;localStorage.setItem("jp_budget_v2",budget);renderAll()};
 ["filterDate","filterCategory","filterPayer","filterText"].forEach(x=>$(x).oninput=renderTable);
@@ -108,7 +142,7 @@ function persist(){localStorage.setItem("jp_expenses_v2",JSON.stringify(data))}
 function save(){
  let a=+$("amount").value||0,r=+$("rate").value||0;
  if(!$("date").value||!$("item").value.trim()||a<=0||r<=0){alert("請完整填寫日期、品項、金額與匯率");return}
- let category=$("category").value.trim()||"其他";
+ let category=$("category").value==="其他"?( $("categoryOther").value.trim()||"其他" ):$("category").value;
   data.push({id:Date.now(),date:$("date").value,item:$("item").value.trim(),category,amount:a,currency:$("currency").value,rate:r,twd:a*r,payer:($("payer").value.trim()||"我"),split:$("split").value});
  persist();$("item").value="";$("amount").value="";calc();renderAll()
 }
@@ -149,7 +183,8 @@ function renderSummary(){
 }
 function renderBudget(){
  let total=data.reduce((s,x)=>s+x.twd,0);
- $("budgetBars").innerHTML=cats.map(c=>{let v=data.filter(x=>x.category===c).reduce((s,x)=>s+x.twd,0);if(!v)return "";let pct=total?v/total*100:0;return `<div class="budgetrow"><div class="budgettop"><span>${c}</span><span>NT$${fmt(v)} (${pct.toFixed(1)}%)</span></div><div class="bar"><i style="width:${Math.min(pct,100)}%"></i></div></div>`}).join("")||`<div class="small">有支出後會顯示類別占比。</div>`
+ let categories=[...new Set(data.map(x=>String(x.category||"").trim()).filter(Boolean))];
+ $("budgetBars").innerHTML=categories.map(c=>{let v=data.filter(x=>x.category===c).reduce((s,x)=>s+x.twd,0);if(!v)return "";let pct=total?v/total*100:0;return `<div class="budgetrow"><div class="budgettop"><span>${esc(c)}</span><span>NT$${fmt(v)} (${pct.toFixed(1)}%)</span></div><div class="bar"><i style="width:${Math.min(pct,100)}%"></i></div></div>`}).join("")||`<div class="small">有支出後會顯示類別占比。</div>`
 }
 function renderStats(type){
  let m={};
@@ -162,7 +197,7 @@ function renderStats(type){
 function renderAll(){renderTable();renderSummary();renderBudget();renderStats(document.querySelector("[data-tab].active")?.dataset.tab||"cat")}
 function del(id){if(confirm("確定刪除這筆支出？")){data=data.filter(x=>x.id!==id);persist();renderAll()}}
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
-$("save").onclick=save;$("clear").onclick=()=>{$("item").value="";$("category").value="";$("amount").value="";$("payer").value="我";calc()};
+$("save").onclick=save;$("clear").onclick=()=>{$("item").value="";$("category").value="餐飲";$("categoryOther").value="";syncOtherCategory();$("amount").value="";$("payer").value="我";calc()};
 $("backup").onclick=()=>{let stamp=new Date().toISOString();localStorage.setItem("jp_last_backup_v2",stamp);$("backupTime").textContent="最後備份："+new Date(stamp).toLocaleString();let blob=new Blob([JSON.stringify({version:2,exportedAt:stamp,budget,data},null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="日本旅遊記帳_v2_備份.json";a.click()};
 $("restoreBtn").onclick=()=>$("restore").click();
 $("restore").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let o=JSON.parse(r.result);data=Array.isArray(o)?o:(o.data||[]);budget=Number(o.budget||0);localStorage.setItem("jp_budget_v2",budget);$("budget").value=budget||"";persist();renderAll();alert("資料已還原")}catch{alert("備份檔格式不正確")}};r.readAsText(f)};
@@ -174,7 +209,8 @@ $("export").onclick=()=>{
  let mine=data.filter(x=>x.payer===p1).reduce((s,x)=>s+x.twd,0),partner=data.filter(x=>x.payer===p2).reduce((s,x)=>s+x.twd,0);
  let common=data.filter(x=>x.split==="共同").reduce((s,x)=>s+x.twd,0),mePersonal=data.filter(x=>x.split==="我個人").reduce((s,x)=>s+x.twd,0),paPersonal=data.filter(x=>x.split==="旅伴個人").reduce((s,x)=>s+x.twd,0),diff=payers.length===2?mine-(common/2+mePersonal):0;
  const detail=[["日期","品項","類別","原幣金額","幣別","匯率","台幣金額","付款者","分帳方式"],...data.map(x=>[x.date,x.item,x.category,x.amount,x.currency,x.rate,x.twd,x.payer,x.split])];
- const cat=[["類別","台幣金額","占總支出"],...cats.map(c=>{let v=data.filter(x=>x.category===c).reduce((s,x)=>s+x.twd,0);return[c,v,total?(v/total):0]}).filter(x=>x[1]>0)];
+ const exportCats=[...new Set(data.map(x=>String(x.category||"").trim()).filter(Boolean))];
+ const cat=[["類別","台幣金額","占總支出"],...exportCats.map(c=>{let v=data.filter(x=>x.category===c).reduce((s,x)=>s+x.twd,0);return[c,v,total?(v/total):0]}).filter(x=>x[1]>0)];
  const day=[["日期","台幣金額"],...Object.entries(data.reduce((m,x)=>(m[x.date]=(m[x.date]||0)+x.twd,m),{})).sort()];
  const settle=[["項目","金額"],["總支出",total],[p1+"實際支付",mine],[p2+"實際支付",partner],["共同支出",common],["我個人",mePersonal],["旅伴個人",paPersonal],["應結算差額",Math.abs(diff)],["結算結果",diff>0?p2+" → "+p1:diff<0?p1+" → "+p2:"已平衡"]];
  const sheet=(name,rows)=>`<table><tr><th colspan="${Math.max(...rows.map(r=>r.length))}">${name}</th></tr>`+rows.map(r=>"<tr>"+r.map(v=>`<td>${esc(v)}</td>`).join("")+"</tr>").join("")+"</table>";
